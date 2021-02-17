@@ -1,3 +1,10 @@
 #!/bin/bash
-java -Xmx8G -cp `./classpath.sh bin` -Dlog4j.configuration=log4j.properties com.oltpbenchmark.DBWorkload $@
+ resultDirectory="result_`date +%Y%m%d_%H.%M.%S`"
+
+java -Xmx8G -cp `./classpath.sh bin` -Dlog4j.configuration=log4j.properties com.oltpbenchmark.DBWorkload -d ${resultDirectory} $@ 2>&1 | tee stdout.txt
+
+if [[ -d ${resultDirectory} ]]; then
+  echo $* >> ${resultDirectory}/cmd_line.txt
+  mv stdout.txt ${resultDirectory}/
+fi
 

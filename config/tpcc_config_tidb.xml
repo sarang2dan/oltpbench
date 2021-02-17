@@ -1,0 +1,55 @@
+<?xml version="1.0"?>
+<parameters>
+    <dbtype>mysql</dbtype>
+    <driver>com.mysql.jdbc.Driver</driver>
+    <DBUrl>jdbc:mysql://localhost:4000/test?useSSL=false&amp;useServerPrepStmts=true&amp;useConfigs=maxPerformance&amp;rewriteBatchedStatements=true
+    </DBUrl>
+    <port>4000</port>
+    <DBName>tpcc</DBName>
+    <username>root</username>
+    <password></password>
+    <isolation>TRANSACTION_REPEATABLE_READ</isolation>
+
+    <!-- Scale factor is the number of warehouses in TPCC -->
+    <scalefactor>2</scalefactor>
+
+    <!-- The workload -->
+    <terminals>2</terminals>
+    <works>
+        <work>
+          <time>60</time>
+          <rate>10000</rate>
+          <weights>45,43,4,4,4</weights>
+          <!-- <ratelimited bench="tpcc">true</ratelimited>-->
+        </work>
+	</works>
+    <batchSize>500</batchSize>
+    <!--
+    <batchSize>128</batchSize>
+    <useKeyingTime>true</useKeyingTime>
+    <useThinkTime>true</useThinkTime>
+    <enableForeignKeysAfterLoad>true</enableForeignKeysAfterLoad>
+    <hikariConnectionTimeoutMs>180000</hikariConnectionTimeoutMs>
+    <useStoredProcedures>false</useStoredProcedures>
+    <displayEnhancedLatencyMetrics>false</displayEnhancedLatencyMetrics>
+    -->
+
+	<!-- TPCC specific -->  	
+   	<transactiontypes>
+    	<transactiontype>
+    		<name>NewOrder</name>
+    	</transactiontype>
+    	<transactiontype>
+    		<name>Payment</name>
+    	</transactiontype>
+    	<transactiontype>
+    		<name>OrderStatus</name>
+    	</transactiontype>
+    	<transactiontype>
+    		<name>Delivery</name>
+    	</transactiontype>
+    	<transactiontype>
+    		<name>StockLevel</name>
+    	</transactiontype>
+   	</transactiontypes>
+</parameters>

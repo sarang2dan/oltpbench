@@ -2,13 +2,13 @@
 <parameters>
 	
     <!-- Connection details -->
-    <dbtype>mysql</dbtype>
-    <driver>com.mysql.jdbc.Driver</driver>
-    <DBUrl>jdbc:mysql://localhost:3306/tpcc?useSSL=false&amp;useServerPrepStmts=true&amp;useConfigs=maxPerformance&amp;rewriteBatchedStatements=true&amp;useJDBCCompliantTimezoneShift=true&amp;useLegacyDatetimeCode=false&amp;serverTimezone=UTC
-    </DBUrl>
-    <username>root</username>
-    <password></password>
-    <isolation>TRANSACTION_SERIALIZABLE</isolation>
+    <dbtype>postgres</dbtype>
+    <driver>org.postgresql.Driver</driver>
+    <DBUrl>jdbc:postgresql://127.0.0.1:5433/yugabyte?ssl=false&amp;prepareThreshold=1000&amp;socketTimeout=0</DBUrl>
+    <DBName>yugabyte</DBName>
+    <username>yugabyte</username>
+    <password>yugabyte</password>
+    <isolation>TRANSACTION_READ_COMMITTED</isolation>
     
     <!-- Scale factor is the number of warehouses in TPCC -->
     <scalefactor>2</scalefactor>
@@ -17,13 +17,16 @@
     <terminals>2</terminals>
     <works>
         <work>
-          <time>60</time>
+          <time>10</time>
           <rate>10000</rate>
+          <ratelimited bench="tpcc">true</ratelimited>
           <weights>45,43,4,4,4</weights>
         </work>
 	</works>
+
+  <batchSize>500</batchSize>
 	
-	<!-- TPCC specific -->  	
+	<!-- TPCC specific -->  
    	<transactiontypes>
     	<transactiontype>
     		<name>NewOrder</name>
