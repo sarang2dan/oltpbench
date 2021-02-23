@@ -20,6 +20,7 @@ package com.oltpbenchmark;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -63,6 +64,14 @@ public class DBWorkload {
     private static final String RATE_DISABLED = "disabled";
     private static final String RATE_UNLIMITED = "unlimited";
     
+    private static boolean isExecute = false;
+    private static int newOrderTxnId = -1;
+    private static int numWarehouses = 10;
+    private static int startWarehouseIdForShard = -1;
+    private static int totalWarehousesAcrossShards = 10;
+    private static int time = 0;
+    private static int warmupTime = 0;
+
     /**
      * @param args
      * @throws Exception 
@@ -232,6 +241,7 @@ public class DBWorkload {
             String isolationMode = xmlConfig.getString("isolation[not(@bench)]", "TRANSACTION_SERIALIZABLE");
             wrkld.setIsolationMode(xmlConfig.getString("isolation" + pluginTest, isolationMode));
             wrkld.setScaleFactor(xmlConfig.getDouble("scalefactor", 1.0));
+            numWarehouses = (int) wrkld.getScaleFactor();
             wrkld.setRecordAbortMessages(xmlConfig.getBoolean("recordabortmessages", false));
             wrkld.setDataDir(xmlConfig.getString("datadir", "."));
 
@@ -295,6 +305,9 @@ public class DBWorkload {
                 }
 
                 TransactionType tmpType = bench.initTransactionType(txnName, txnId + txnIdOffset);
+                if (txnName.equals("NewOrder")) {
+                    newOrderTxnId = txnId + txnIdOffset;
+                }
 
                 // Keep a reference for filtering
                 activeTXTypes.add(tmpType);
@@ -442,8 +455,9 @@ public class DBWorkload {
                     System.exit(-1);
                 }
 
-                int time = work.getInt("/time", 0);
-                int warmup = work.getInt("/warmup", 0);
+                time = work.getInt("/time", 0);
+                warmupTime = work.getInt("/warmup", 0);
+
                 timed = (time > 0);
                 if (scriptRun) {
                     LOG.info("Running a script; ignoring timer, serial, and weight settings.");
@@ -469,14 +483,14 @@ public class DBWorkload {
                 else if (serial)
                     LOG.info("Timer enabled for serial run; will run queries"
                              + " serially in a loop until the timer expires.");
-                if (warmup < 0) {
+                if (warmupTime < 0) {
                     LOG.fatal("Must provide nonnegative time bound for"
                             + " warmup.");
                     System.exit(-1);
                 }
 
                 wrkld.addWork(time,
-                              warmup,
+                              warmupTime,
                               rate,
                               weight_strings,
                               rateLimited,
@@ -583,6 +597,8 @@ public class DBWorkload {
         if (isBooleanOptionSet(argsLine, "execute")) {
             // Bombs away!
             Results r = null;
+            isExecute = true;
+
             try {
                 r = runWorkload(benchList, verbose, intervalMonitor);
             } catch (Throwable ex) {
@@ -845,7 +861,15 @@ public class DBWorkload {
     private static Results runWorkload(List<BenchmarkModule> benchList, boolean verbose, int intervalMonitor) throws QueueLimitException, IOException {
         List<Worker<?>> workers = new ArrayList<Worker<?>>();
         List<WorkloadConfiguration> workConfs = new ArrayList<WorkloadConfiguration>();
+        long start = System.nanoTime();
+        long end = start + Long.valueOf(warmupTime + time) * 1000 * 1000 * 1000;
+        String benchmarkName = "";
+
         for (BenchmarkModule bench : benchList) {
+            if (benchmarkName.length() == 0) {
+                benchmarkName = bench.getBenchmarkName();
+            }
+
             LOG.info("Creating " + bench.getWorkloadConfiguration().getTerminals() + " virtual terminals...");
             workers.addAll(bench.makeWorkers(verbose));
             // LOG.info("done.");
@@ -858,6 +882,28 @@ public class DBWorkload {
         }
         Results r = ThreadBench.runRateLimitedBenchmark(workers, workConfs, intervalMonitor);
         LOG.info(SINGLE_LINE);
+
+        if (benchmarkName == "tpcc" && isExecute == true) {
+            long numNewOrderTransactions = 0;
+            for (Worker<?> w : workers) {
+                for (LatencyRecord.Sample sample : w.getLatencyRecords()) {
+                    if (sample.tranType == newOrderTxnId) { //&& sample.startNs + 1000L * sample.latencyUs <= end) {
+                        ++numNewOrderTransactions;
+                    }
+                }
+            }
+
+            LOG.info("Num of Warehouses: " + numWarehouses);
+            double tpmc = 1.0 * numNewOrderTransactions * 60 / time;
+            double efficiency = (1.0 * tpmc * 100 / numWarehouses) / 12.86;
+            DecimalFormat df = new DecimalFormat();
+            df.setMaximumFractionDigits(2);
+
+            LOG.info("Throughput: " + r + " reqs/sec");
+            LOG.info("Num New Order transactions : " + numNewOrderTransactions + ", time seconds: " + time);
+            LOG.info("TPM-C: " + df.format(tpmc));
+            LOG.info("Efficiency : " + df.format(efficiency) + "%");
+        }
         LOG.info("Rate limited reqs/s: " + r);
         return r;
     }
