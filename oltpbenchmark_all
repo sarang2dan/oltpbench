@@ -1,0 +1,159 @@
+#!/bin/bash
+
+date_path=
+OS=`uname -s`
+if [[ "$OS" == "Darwin" ]]; then
+  if [[ ! -f /usr/local/opt/coreutils/libexec/gnubin/date ]]; then 
+    echo "PLZ INSTALL 'date'"
+    echo "    $ brew install coreutils"
+    exit
+  else
+    date_path=/usr/local/opt/coreutils/libexec/gnubin/
+  fi
+fi
+
+
+TEST_DIR=`pwd`
+
+host=ds5
+dbms=tidb
+test_time=`date +"%m%d.%H%M%S"`
+
+TPCC="$TEST_DIR/oltpbenchmark_no_res -b tpcc"
+CONF=$TEST_DIR/config/tpcc_config_${host}_${dbms}_$t_$w.xml
+
+terminal_cnt="1 8 16 32 64"
+warehouse_cnt="1 10 20 30"
+#terminal_cnt="1 8"
+#warehouse_cnt="1 10"
+
+
+tseq=1
+function print_line() {
+  echo "#########################################################################"
+  echo "######### $tseq. $1 ############"
+  echo "#########################################################################"
+  tseq=$(($tseq + 1))
+}
+
+function get_curtime_msec() {
+  echo `${date_path}date +"%s%3N"`
+}
+
+function get_elapsed_sec() {
+  _start=$1
+  _end=$2
+  _elapsed=`echo "scale=2; (${_end} - ${_start}) / 1000" | bc -l`
+  echo ${_elapsed}
+}
+
+function get_tpmc() {
+  grep "TPM-C" $1 | awk '{print $6}'
+}
+
+function get_req_per_sec() {
+  grep "reqs\/sec" $1 | awk '{print $9}'
+}
+
+function get_conf_file() {
+  t=$1 # terminal count
+  w=$2 # warehouse count
+  CONF=$TEST_DIR/config/tpcc_config_${host}_${dbms}_${t}_${w}.xml
+  echo $CONF
+}
+
+result_path=$TEST_DIR/res_${test_time}
+result_file=${result_path}/result.txt
+mkdir -p $result_path
+touch ${result_file}
+
+#########################################################################
+print_line "loading DB 테스트"
+#########################################################################
+# terminal 수 출력
+t=16  # loading 테스트에서는 terminal 수는 16으로 고정
+printf "term_l\t%d\n" $t | tee -a ${result_file}
+for w in $warehouse_cnt;
+do
+  # conf 파일 지정
+  CONF=`(get_conf_file $t $w)`
+
+  # 시작 시간 획득
+  start_time=`(get_curtime_msec)`
+
+  # DB create & loading  수행
+  echo "$TPCC -c $CONF --create=true --load=true"
+  $TPCC -c $CONF --create=true --load=true 
+
+  # 종료 시간 획득
+  end_time=`(get_curtime_msec)`
+
+  # 경과 시간 계산 및 출력
+  elapsed=`(get_elapsed_sec ${start_time} ${end_time})`
+  printf "%d\t%s\n" $w  $elapsed | tee -a ${result_file}
+done
+echo "" >> ${result_file}
+
+
+#########################################################################
+print_line "트랜잭션 처리 테스트 - 터미널 개수 고정, 웨어하우스 변경"
+#########################################################################
+# terminal 수 출력
+t=16  # terminal 수는 16으로 고정
+printf "term_e\t%d\n" $t | tee -a ${result_file}
+for w in $warehouse_cnt;
+do
+  # conf 파일 지정
+  CONF=`(get_conf_file $t $w)`
+
+  # DB create & loading  수행
+  echo "$TPCC -c $CONF --create=true --load=true"
+  $TPCC -c $CONF --create=true --load=true 
+
+  # 트랜잭션 실행
+  echo "$TPCC -c $CONF --execute=true | tee ${result_path}/tmp"
+  $TPCC -c $CONF --execute=true | tee ${result_path}/tmp
+
+  # 분당요청수 획득
+  reqsec_val=`(get_req_per_sec ${result_path}/tmp)`
+
+  # TPM-C  획득
+  tpmc_val=`(get_tpmc ${result_path}/tmp)`
+
+
+  # 결과 출력
+  printf "%s\t%s\t%s\n" $w ${reqsec_val} ${tpmc_val} | tee -a ${result_file}
+done
+echo "" >> ${result_file}
+
+
+#########################################################################
+print_line "트랜잭션 처리 테스트 - 터미널 개수 변경,  웨어하우스 고정"
+#########################################################################
+# warehouse 수 출력
+w=10  # warehouse 수는 10으로 고정
+printf "ware_e\t%d\n" $w | tee -a ${result_file}
+for t in $terminal_cnt;
+do
+  # conf 파일 지정
+  CONF=`(get_conf_file $t $w)`
+
+  # DB create & loading  수행
+  echo "$TPCC -c $CONF --create=true --load=true"
+  $TPCC -c $CONF --create=true --load=true
+
+  # 트랜잭션 실행
+  echo "$TPCC -c $CONF --execute=true | tee ${result_path}/tmp"
+  $TPCC -c $CONF --execute=true | tee ${result_path}/tmp
+
+  # 분당요청수 획득
+  reqsec_val=`(get_req_per_sec ${result_path}/tmp)`
+
+  # TPM-C  획득
+  tpmc_val=`(get_tpmc ${result_path}/tmp)`
+
+  # 결과 출력
+  printf "%s\t%s\t%s\n" $t ${reqsec_val} ${tpmc_val} | tee -a ${result_file}
+done
+echo "" >> ${result_file}
+
